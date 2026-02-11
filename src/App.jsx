@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import emailjs from '@emailjs/browser'
 import './App.css'
 
@@ -61,36 +61,37 @@ function App() {
     Object.fromEntries(PRAYERS.map((p) => [p, '']))
   )
 
-  const emailSentRef = useRef(false)
+  function sendBackupEmail(prayerData, skipGuard) {
+    if (!skipGuard) {
+      const lastSentWeek = localStorage.getItem(EMAIL_SENT_KEY)
+      const currentWeek = new Date().toISOString().slice(0, 10)
+      if (lastSentWeek === currentWeek) return
+    }
 
-  function sendWeeklyEmail(prayerData) {
-    const lastSentWeek = localStorage.getItem(EMAIL_SENT_KEY)
-    const currentWeek = new Date().toISOString().slice(0, 10)
-    if (lastSentWeek === currentWeek) return
-
+    const currentDate = new Date().toISOString().slice(0, 10)
     const summary = PRAYERS.map((p) => {
       const d = prayerData[p]
       return `${p}: ${d.completedThisWeek} completed | ${d.totalQada} remaining`
     }).join('\n')
 
     emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-      subject: `Solat Qada Weekly Backup — ${currentWeek}`,
+      subject: `Solat Qada Weekly Backup - ${currentDate}`,
       message: `Hi Zulkifle Muhammad,\n\nThis is your weekly Qada Solat backup.\n\n--- Weekly Summary ---\n${summary}\n\n--- Full Backup Data ---\n${JSON.stringify({ prayers: prayerData }, null, 2)}\n\nBest regards,\nMyDear Self`,
     }, EMAILJS_PUBLIC_KEY).then(
       () => {
-        localStorage.setItem(EMAIL_SENT_KEY, currentWeek)
-        console.log('Weekly backup email sent.')
+        localStorage.setItem(EMAIL_SENT_KEY, currentDate)
+        alert('Backup email sent successfully!')
       },
-      (err) => console.error('Email failed:', err)
+      (err) => {
+        console.error('Email failed:', err)
+        alert('Email failed: ' + (err?.text || err?.message || JSON.stringify(err)))
+      }
     )
   }
 
   const resetWeek = useCallback(() => {
     setPrayers((prev) => {
-      if (!emailSentRef.current) {
-        emailSentRef.current = true
-        sendWeeklyEmail(prev)
-      }
+      sendBackupEmail(prev, false)
       const updated = { ...prev }
       for (const p of PRAYERS) {
         updated[p] = { ...updated[p], completedThisWeek: 0 }

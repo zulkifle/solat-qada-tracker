@@ -69,6 +69,23 @@ body {
   background: #4e7a4e;
 }
 
+.export-btn,
+.import-btn {
+  background: #3d5c3d;
+  color: #e0dcc8;
+  border: none;
+  padding: 0.25rem 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: background 0.2s;
+}
+
+.export-btn:hover,
+.import-btn:hover {
+  background: #4e7a4e;
+}
+
 .prayers-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

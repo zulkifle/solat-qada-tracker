@@ -1,8 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import emailjs from '@emailjs/browser'
 import './App.css'
 
 const PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
 const STORAGE_KEY = 'solat-qada-tracker'
+const EMAIL_SENT_KEY = 'solat-qada-email-sent'
+
+const EMAILJS_SERVICE_ID = 'service_8vtayrw'
+const EMAILJS_TEMPLATE_ID = 'template_u4lr9tr'
+const EMAILJS_PUBLIC_KEY = 'ddx1dLrvc06mPJ8xW'
 
 function getDefaultPrayerData() {
   return Object.fromEntries(
@@ -55,8 +61,36 @@ function App() {
     Object.fromEntries(PRAYERS.map((p) => [p, '']))
   )
 
+  const emailSentRef = useRef(false)
+
+  function sendWeeklyEmail(prayerData) {
+    const lastSentWeek = localStorage.getItem(EMAIL_SENT_KEY)
+    const currentWeek = new Date().toISOString().slice(0, 10)
+    if (lastSentWeek === currentWeek) return
+
+    const summary = PRAYERS.map((p) => {
+      const d = prayerData[p]
+      return `${p}: ${d.completedThisWeek} completed | ${d.totalQada} remaining`
+    }).join('\n')
+
+    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      subject: `Solat Qada Weekly Backup — ${currentWeek}`,
+      message: `Hi Zulkifle Muhammad,\n\nThis is your weekly Qada Solat backup.\n\n--- Weekly Summary ---\n${summary}\n\n--- Full Backup Data ---\n${JSON.stringify({ prayers: prayerData }, null, 2)}\n\nBest regards,\nMyDear Self`,
+    }, EMAILJS_PUBLIC_KEY).then(
+      () => {
+        localStorage.setItem(EMAIL_SENT_KEY, currentWeek)
+        console.log('Weekly backup email sent.')
+      },
+      (err) => console.error('Email failed:', err)
+    )
+  }
+
   const resetWeek = useCallback(() => {
     setPrayers((prev) => {
+      if (!emailSentRef.current) {
+        emailSentRef.current = true
+        sendWeeklyEmail(prev)
+      }
       const updated = { ...prev }
       for (const p of PRAYERS) {
         updated[p] = { ...updated[p], completedThisWeek: 0 }
@@ -112,6 +146,34 @@ function App() {
     setTodayInput((prev) => ({ ...prev, [prayer]: '' }))
   }
 
+  function handleExport() {
+    const data = JSON.stringify({ prayers, weekStartDate }, null, 2)
+    const blob = new Blob([data], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `solat-qada-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImport(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      try {
+        const imported = JSON.parse(evt.target.result)
+        if (imported?.prayers) setPrayers(imported.prayers)
+        if (imported?.weekStartDate) setWeekStartDate(imported.weekStartDate)
+      } catch {
+        alert('Invalid backup file.')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
   const daysLeft = getDaysLeftInWeek(weekStartDate)
 
   function isWarning(prayer) {
@@ -141,6 +203,13 @@ function App() {
         <button className="reset-btn" onClick={resetWeek}>
           Reset Week
         </button>
+        <button className="export-btn" onClick={handleExport}>
+          Export
+        </button>
+        <label className="import-btn">
+          Import
+          <input type="file" accept=".json" onChange={handleImport} hidden />
+        </label>
       </div>
 
       <div className="prayers-grid">

@@ -131,7 +131,10 @@ function App() {
 
   return (
     <div className="app">
-      <h1>Solat Qada Tracker</h1>
+      <div className="app-header">
+        <img src="/islamic-logo-mosque-vector.jpg" alt="Logo" className="app-logo" />
+        <h1>Solat Qada Tracker</h1>
+      </div>
 
       <div className="week-info">
         <span>Days left this week: <strong>{daysLeft}</strong></span>

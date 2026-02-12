@@ -41,6 +41,106 @@ body {
   letter-spacing: 0.02em;
 }
 
+/* Login screen */
+.login-card {
+  background: #1a2e1a;
+  border: 1px solid #2d4a2d;
+  border-radius: 8px;
+  padding: 1.5rem;
+  max-width: 350px;
+  margin: 1rem auto;
+}
+
+.login-card h2 {
+  text-align: center;
+  color: #c9a84c;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.login-card .field {
+  margin-bottom: 0.75rem;
+}
+
+.login-card input {
+  width: 100%;
+}
+
+.login-error {
+  color: #cf6e6e;
+  font-size: 0.8rem;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.login-btn {
+  width: 100%;
+  background: #2d8a4e;
+  color: #f0ead6;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.login-btn:hover {
+  background: #3aa860;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-toggle {
+  text-align: center;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #8a9a78;
+}
+
+.login-toggle button {
+  background: none;
+  border: none;
+  color: #c9a84c;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.8rem;
+}
+
+/* User info & logout */
+.app-header {
+  position: relative;
+}
+
+.user-info {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: #8a9a78;
+}
+
+.logout-btn {
+  background: #4a2d2d;
+  color: #cf6e6e;
+  border: none;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.logout-btn:hover {
+  background: #5a3d3d;
+}
+
 .week-info {
   display: flex;
   justify-content: center;
@@ -53,6 +153,28 @@ body {
   border: 1px solid #2d4a2d;
   border-radius: 6px;
   font-size: 0.82rem;
+}
+
+.sync-status {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.sync-status.synced {
+  background: #2d4a2d;
+  color: #6ecf6e;
+}
+
+.sync-status.loading {
+  background: #4a4a2d;
+  color: #cfcf6e;
+}
+
+.sync-status.offline {
+  background: #4a2d2d;
+  color: #cf6e6e;
 }
 
 .reset-btn {
@@ -173,6 +295,19 @@ body {
 
 .input-row button:hover {
   background: #3aa860;
+}
+
+.input-row .edit-btn {
+  background: #5a5a3d;
+}
+
+.input-row .edit-btn:hover {
+  background: #7a7a4d;
+}
+
+input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .progress-section {

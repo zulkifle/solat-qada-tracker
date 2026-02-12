@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import emailjs from '@emailjs/browser'
+import { loadFromFirestore, saveToFirestore, loginUser, registerUser } from './firebase'
 import './App.css'
 
 const PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
@@ -45,6 +46,15 @@ function shouldAutoReset(weekStartDate) {
 }
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    return localStorage.getItem('solat-qada-user') || null
+  })
+  const [loginUsername, setLoginUsername] = useState('')
+  const [loginPin, setLoginPin] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [isRegisterMode, setIsRegisterMode] = useState(false)
+
   const [prayers, setPrayers] = useState(() => {
     const saved = loadData()
     if (saved?.prayers) return saved.prayers
@@ -60,6 +70,100 @@ function App() {
   const [todayInput, setTodayInput] = useState(
     Object.fromEntries(PRAYERS.map((p) => [p, '']))
   )
+
+  const [editingTotal, setEditingTotal] = useState(
+    Object.fromEntries(PRAYERS.map((p) => [p, false]))
+  )
+  const [syncStatus, setSyncStatus] = useState('loading')
+  const skipNextSync = useRef(false)
+
+  async function handleLogin() {
+    if (!loginUsername.trim() || !loginPin.trim()) {
+      setLoginError('Please enter username and PIN')
+      return
+    }
+    setLoginLoading(true)
+    setLoginError('')
+    try {
+      const result = await loginUser(loginUsername.trim(), loginPin.trim())
+      if (!result.success) {
+        setLoginError(result.error)
+        setLoginLoading(false)
+        return
+      }
+      const username = loginUsername.trim().toLowerCase()
+      localStorage.setItem('solat-qada-user', username)
+      setCurrentUser(username)
+      if (result.data?.prayers) {
+        skipNextSync.current = true
+        setPrayers(result.data.prayers)
+        if (result.data.weekStartDate) setWeekStartDate(result.data.weekStartDate)
+        saveData(result.data)
+      }
+      setSyncStatus('synced')
+    } catch (err) {
+      setLoginError('Connection failed. Try again.')
+      console.error(err)
+    }
+    setLoginLoading(false)
+  }
+
+  async function handleRegister() {
+    if (!loginUsername.trim() || !loginPin.trim()) {
+      setLoginError('Please enter username and PIN')
+      return
+    }
+    if (loginPin.trim().length < 4) {
+      setLoginError('PIN must be at least 4 characters')
+      return
+    }
+    setLoginLoading(true)
+    setLoginError('')
+    try {
+      const result = await registerUser(loginUsername.trim(), loginPin.trim())
+      if (!result.success) {
+        setLoginError(result.error)
+        setLoginLoading(false)
+        return
+      }
+      const username = loginUsername.trim().toLowerCase()
+      localStorage.setItem('solat-qada-user', username)
+      setCurrentUser(username)
+      setPrayers(getDefaultPrayerData())
+      setWeekStartDate(new Date().toISOString())
+      setSyncStatus('synced')
+    } catch (err) {
+      setLoginError('Connection failed. Try again.')
+      console.error(err)
+    }
+    setLoginLoading(false)
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('solat-qada-user')
+    setCurrentUser(null)
+    setLoginUsername('')
+    setLoginPin('')
+    setLoginError('')
+    setSyncStatus('loading')
+  }
+
+  // Load from Firestore on mount (when user is already logged in)
+  useEffect(() => {
+    if (!currentUser) return
+    loadFromFirestore(currentUser).then((data) => {
+      if (data?.prayers) {
+        skipNextSync.current = true
+        setPrayers(data.prayers)
+        if (data.weekStartDate) setWeekStartDate(data.weekStartDate)
+        saveData({ prayers: data.prayers, weekStartDate: data.weekStartDate })
+      }
+      setSyncStatus('synced')
+    }).catch((err) => {
+      console.error('Firestore load failed:', err)
+      setSyncStatus('offline')
+    })
+  }, [currentUser])
 
   function sendBackupEmail(prayerData, skipGuard) {
     if (!skipGuard) {
@@ -108,9 +212,20 @@ function App() {
     }
   }, [weekStartDate, resetWeek])
 
-  // Persist to localStorage
+  // Persist to localStorage + Firestore
   useEffect(() => {
     saveData({ prayers, weekStartDate })
+    if (skipNextSync.current) {
+      skipNextSync.current = false
+      return
+    }
+    if (!currentUser) return
+    saveToFirestore(currentUser, { prayers, weekStartDate }).then(() => {
+      setSyncStatus('synced')
+    }).catch((err) => {
+      console.error('Firestore save failed:', err)
+      setSyncStatus('offline')
+    })
   }, [prayers, weekStartDate])
 
   function handleSetTotal(prayer, value) {
@@ -192,15 +307,74 @@ function App() {
     return Math.min(100, Math.round((data.completedThisWeek / data.weeklyTarget) * 100))
   }
 
+  if (!currentUser) {
+    return (
+      <div className="app">
+        <div className="app-header">
+          <img src="/islamic-logo-mosque-vector.jpg" alt="Logo" className="app-logo" />
+          <h1>Solat Qada Tracker</h1>
+        </div>
+        <div className="login-card">
+          <h2>{isRegisterMode ? 'Register' : 'Login'}</h2>
+          <div className="field">
+            <label>Username</label>
+            <input
+              type="text"
+              value={loginUsername}
+              onChange={(e) => setLoginUsername(e.target.value)}
+              placeholder="Enter username"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') isRegisterMode ? handleRegister() : handleLogin()
+              }}
+            />
+          </div>
+          <div className="field">
+            <label>PIN</label>
+            <input
+              type="password"
+              value={loginPin}
+              onChange={(e) => setLoginPin(e.target.value)}
+              placeholder="Enter PIN"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') isRegisterMode ? handleRegister() : handleLogin()
+              }}
+            />
+          </div>
+          {loginError && <p className="login-error">{loginError}</p>}
+          <button
+            className="login-btn"
+            onClick={isRegisterMode ? handleRegister : handleLogin}
+            disabled={loginLoading}
+          >
+            {loginLoading ? 'Please wait...' : isRegisterMode ? 'Register' : 'Login'}
+          </button>
+          <p className="login-toggle">
+            {isRegisterMode ? 'Already have an account?' : 'New user?'}{' '}
+            <button onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError('') }}>
+              {isRegisterMode ? 'Login' : 'Register'}
+            </button>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <div className="app-header">
         <img src="/islamic-logo-mosque-vector.jpg" alt="Logo" className="app-logo" />
         <h1>Solat Qada Tracker</h1>
+        <div className="user-info">
+          <span>{currentUser}</span>
+          <button className="logout-btn" onClick={handleLogout}>Logout</button>
+        </div>
       </div>
 
       <div className="week-info">
         <span>Days left this week: <strong>{daysLeft}</strong></span>
+        <span className={`sync-status ${syncStatus}`}>
+          {syncStatus === 'synced' ? 'Synced' : syncStatus === 'loading' ? 'Loading...' : 'Offline'}
+        </span>
         <button className="reset-btn" onClick={resetWeek}>
           Reset Week
         </button>
@@ -228,12 +402,22 @@ function App() {
 
               <div className="field">
                 <label>Total Qada Remaining</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={data.totalQada}
-                  onChange={(e) => handleSetTotal(prayer, e.target.value)}
-                />
+                <div className="input-row">
+                  <input
+                    type="number"
+                    min="0"
+                    value={data.totalQada}
+                    onChange={(e) => handleSetTotal(prayer, e.target.value)}
+                    onBlur={(e) => { e.target.value = data.totalQada }}
+                    disabled={!editingTotal[prayer]}
+                  />
+                  <button
+                    className={editingTotal[prayer] ? 'save-btn' : 'edit-btn'}
+                    onClick={() => setEditingTotal((prev) => ({ ...prev, [prayer]: !prev[prayer] }))}
+                  >
+                    {editingTotal[prayer] ? 'Save' : 'Edit'}
+                  </button>
+                </div>
               </div>
 
               <div className="field">
@@ -243,6 +427,7 @@ function App() {
                   min="0"
                   value={data.weeklyTarget}
                   onChange={(e) => handleSetWeeklyTarget(prayer, e.target.value)}
+                  onBlur={(e) => { e.target.value = data.weeklyTarget }}
                 />
               </div>
 

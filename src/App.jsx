@@ -3,13 +3,21 @@ import emailjs from '@emailjs/browser'
 import { loadFromFirestore, saveToFirestore, loginUser, registerUser } from './firebase'
 import './App.css'
 
-const PRAYERS = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
+const PRAYERS = ['Subuh', 'Zohor', 'Asar', 'Maghrib', 'Isyak']
 const STORAGE_KEY = 'solat-qada-tracker'
 const EMAIL_SENT_KEY = 'solat-qada-email-sent'
 
 const EMAILJS_SERVICE_ID = 'service_8vtayrw'
 const EMAILJS_TEMPLATE_ID = 'template_u4lr9tr'
 const EMAILJS_PUBLIC_KEY = 'ddx1dLrvc06mPJ8xW'
+
+const OLD_TO_NEW = {
+  Fajr: 'Subuh',
+  Dhuhr: 'Zohor',
+  Asr: 'Asar',
+  Maghrib: 'Maghrib',
+  Isha: 'Isyak',
+}
 
 function getDefaultPrayerData() {
   return Object.fromEntries(
@@ -18,6 +26,19 @@ function getDefaultPrayerData() {
       { totalQada: 0, weeklyTarget: 0, completedThisWeek: 0 },
     ])
   )
+}
+
+function migratePrayerNames(data) {
+  if (!data) return null
+  const hasAllNewKeys = PRAYERS.every((p) => data[p])
+  if (hasAllNewKeys) return data
+  const hasOldKeys = ['Fajr', 'Dhuhr', 'Asr', 'Isha'].some((k) => data[k])
+  if (!hasOldKeys) return data
+  const migrated = {}
+  for (const [oldKey, newKey] of Object.entries(OLD_TO_NEW)) {
+    migrated[newKey] = data[oldKey] || { totalQada: 0, weeklyTarget: 0, completedThisWeek: 0 }
+  }
+  return migrated
 }
 
 function loadData() {
@@ -57,7 +78,7 @@ function App() {
 
   const [prayers, setPrayers] = useState(() => {
     const saved = loadData()
-    if (saved?.prayers) return saved.prayers
+    if (saved?.prayers) return migratePrayerNames(saved.prayers) || getDefaultPrayerData()
     return getDefaultPrayerData()
   })
 
@@ -95,10 +116,11 @@ function App() {
       localStorage.setItem('solat-qada-user', username)
       setCurrentUser(username)
       if (result.data?.prayers) {
+        const migrated = migratePrayerNames(result.data.prayers) || result.data.prayers
         skipNextSync.current = true
-        setPrayers(result.data.prayers)
+        setPrayers(migrated)
         if (result.data.weekStartDate) setWeekStartDate(result.data.weekStartDate)
-        saveData(result.data)
+        saveData({ prayers: migrated, weekStartDate: result.data.weekStartDate })
       }
       setSyncStatus('synced')
     } catch (err) {
@@ -153,10 +175,11 @@ function App() {
     if (!currentUser) return
     loadFromFirestore(currentUser).then((data) => {
       if (data?.prayers) {
+        const migrated = migratePrayerNames(data.prayers) || data.prayers
         skipNextSync.current = true
-        setPrayers(data.prayers)
+        setPrayers(migrated)
         if (data.weekStartDate) setWeekStartDate(data.weekStartDate)
-        saveData({ prayers: data.prayers, weekStartDate: data.weekStartDate })
+        saveData({ prayers: migrated, weekStartDate: data.weekStartDate })
       }
       setSyncStatus('synced')
     }).catch((err) => {
@@ -195,7 +218,7 @@ function App() {
 
   const resetWeek = useCallback(() => {
     setPrayers((prev) => {
-      sendBackupEmail(prev, false)
+      // sendBackupEmail(prev, false)
       const updated = { ...prev }
       for (const p of PRAYERS) {
         updated[p] = { ...updated[p], completedThisWeek: 0 }
